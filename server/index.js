@@ -1,101 +1,114 @@
-const { Server } = require('socket.io');
+// server.js
+const express = require('express');
+const http = require('http');
+const socketIo = require('socket.io');
 const cors = require('cors');
 
+const app = express();
+app.use(cors());
+app.use(express.json());
+// Add this just before other routes
+app.get('/', (req, res) => {
+  res.send('Server is running...');
+});
+
+const allowedOrigins = [
+  'http://localhost:3000',                    // For local development
+  'https://real-t-ime-chat-client-fawn.vercel.app/'      // Your deployed React app (Vercel)
+];
+
+
+const server = http.createServer(app);
+const io = socketIo(server, {
+  cors: {
+    origin: allowedOrigins,// React app URL
+    methods: ["GET", "POST"],
+    credentials: true
+  }
+});
+
+
 // Store connected users and messages
-let users = {};
-let messages = [];
+const users = {};
+const messages = [];
 
-// Persist io instance across hot reloads
-let io;
-
-export default function handler(req, res) {
-  // Allow CORS for server requests
-  if (req.method === 'OPTIONS') {
-    res.setHeader('Access-Control-Allow-Credentials', true);
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', '*');
-    return res.status(200).end();
-  }
-
-  // Return users or messages via REST server
-  if (req.method === 'GET') {
-    if (req.url === '/server/users') {
-      return res.status(200).json(Object.values(users));
-    }
-    if (req.url === '/server/messages') {
-      return res.status(200).json(messages);
-    }
-    return res.status(200).send('Socket Server is running 🚀');
-  }
-
-  // Attach Socket.IO if not already
-  if (!res.socket.server.io) {
-    console.log('Initializing Socket.IO...');
-    io = new Server(res.socket.server, {
-      cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-      }
+// Socket.IO connection handling
+io.on('connection', (socket) => {
+  console.log('New client connected:', socket.id);
+  
+  // Handle user joining
+  socket.on('join', (username) => {
+    users[socket.id] = { username, id: socket.id };
+    
+    // Broadcast to all clients that a new user has joined
+    io.emit('userJoined', { 
+      user: users[socket.id],
+      users: Object.values(users),
+      messages
     });
-    res.socket.server.io = io;
-
-    io.on('connection', (socket) => {
-      console.log('New client connected:', socket.id);
-
-      // Handle user joining
-      socket.on('join', (username) => {
-        users[socket.id] = { username, id: socket.id };
-        io.emit('userJoined', {
-          user: users[socket.id],
-          users: Object.values(users),
-          messages
-        });
-        console.log(`${username} joined the chat`);
+    
+    console.log(`${username} joined the chat`);
+  });
+  
+  // Handle new messages
+  socket.on('sendMessage', (message) => {
+    const user = users[socket.id];
+    
+    if (user) {
+      const newMessage = {
+        id: Date.now(),
+        text: message,
+        sender: user.username,
+        senderId: socket.id,
+        timestamp: new Date().toISOString()
+      };
+      
+      messages.push(newMessage);
+      
+      // Broadcast the message to all clients
+      io.emit('newMessage', newMessage);
+    }
+  });
+  
+  // Handle typing indicator
+  socket.on('typing', (isTyping) => {
+    const user = users[socket.id];
+    if (user) {
+      socket.broadcast.emit('userTyping', {
+        userId: socket.id,
+        username: user.username,
+        isTyping
       });
-
-      // Handle new messages
-      socket.on('sendMessage', (message) => {
-        const user = users[socket.id];
-        if (user) {
-          const newMessage = {
-            id: Date.now(),
-            text: message,
-            sender: user.username,
-            senderId: socket.id,
-            timestamp: new Date().toISOString()
-          };
-          messages.push(newMessage);
-          io.emit('newMessage', newMessage);
-        }
+    }
+  });
+  
+  // Handle disconnection
+  socket.on('disconnect', () => {
+    const user = users[socket.id];
+    
+    if (user) {
+      console.log(`${user.username} left the chat`);
+      delete users[socket.id];
+      
+      // Inform other clients that a user has disconnected
+      io.emit('userLeft', {
+        userId: socket.id,
+        users: Object.values(users)
       });
+    }
+  });
+});
 
-      // Typing indicator
-      socket.on('typing', (isTyping) => {
-        const user = users[socket.id];
-        if (user) {
-          socket.broadcast.emit('userTyping', {
-            userId: socket.id,
-            username: user.username,
-            isTyping
-          });
-        }
-      });
+// Basic API endpoints
+app.get('/api/users', (req, res) => {
+  res.json(Object.values(users));
+});
 
-      // Disconnect handler
-      socket.on('disconnect', () => {
-        const user = users[socket.id];
-        if (user) {
-          console.log(`${user.username} left the chat`);
-          delete users[socket.id];
-          io.emit('userLeft', {
-            userId: socket.id,
-            users: Object.values(users)
-          });
-        }
-      });
-    });
-  }
+app.get('/api/messages', (req, res) => {
+  res.json(messages);
+});
 
-  res.end();
-}
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
