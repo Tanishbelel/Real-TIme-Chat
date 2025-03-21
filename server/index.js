@@ -14,7 +14,7 @@ app.get('/', (req, res) => {
 
 const allowedOrigins = [
   'http://localhost:3000',                    // For local development
-  'https://real-t-ime-chat-client-fawn.vercel.app/'      // Your deployed React app (Vercel)
+  'https://real-time-chat-2-hms3.onrender.com/'      // Your deployed React app (Vercel)
 ];
 
 
