@@ -17,13 +17,6 @@ const io = socketIo(server, {
   }
 });
 
-// Serve static files from React build
-app.use(express.static(path.join(__dirname, 'client/build')));
-
-// API routes
-app.get('/api', (req, res) => {
-  res.json({ message: 'Hello from backend!' });
-});
 
 // Store connected users and messages
 const users = {};
