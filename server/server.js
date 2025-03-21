@@ -101,9 +101,3 @@ const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
-
-const cors = require('cors');
-app.use(cors({
-  origin: 'https://happy-achievement.up.railway.app', // Frontend URL from Railway
-  methods: ["GET", "POST"],
-}));
